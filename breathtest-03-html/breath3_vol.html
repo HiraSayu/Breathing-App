@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>音量しきい値つき音声認識</title>
+</head>
+<body>
+  <h1>音声認識（ノイズ除去）</h1>
+  <button onclick="start()">開始</button>
+  <h2 id="label">ラベル: -</h2>
+  <h2 id="probability">信頼度: -</h2>
+  <h2 id="volume">音量(dB): -</h2>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.3.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0"></script>
+
+  <script>
+    //const URL = "https://teachablemachine.withgoogle.com/models/DpGApq8fT/"; // ← ヘッドセット
+    const URL = "https://teachablemachine.withgoogle.com/models/on5fBWRLe/"; //←pcマイク
+    //const URL = "https://teachablemachine.withgoogle.com/models/xhlQ0DVwv/"; //←スマホのトップマイク
+
+
+
+    const THRESHOLD_DB = 60; // これより大きい（音が大きい）ときに認識開始
+    let recognizer, audioContext, analyserNode, micStream;
+    let listening = false;
+
+    async function createModel() {
+      recognizer = speechCommands.create(
+        "BROWSER_FFT",
+        undefined,
+        URL + "model.json",
+        URL + "metadata.json"
+      );
+      await recognizer.ensureModelLoaded();
+    }
+
+    async function start() {
+      await createModel();
+      await setupMicVolumeWatcher();
+    }
+
+    async function setupMicVolumeWatcher() {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const source = audioContext.createMediaStreamSource(micStream);
+
+      analyserNode = audioContext.createAnalyser();
+      analyserNode.fftSize = 2048;
+
+      source.connect(analyserNode);
+
+      const data = new Uint8Array(analyserNode.fftSize);
+      monitorVolume(data);
+    }
+
+    function monitorVolume(dataArray) {
+      function loop() {
+        analyserNode.getByteTimeDomainData(dataArray);
+        let sumSquares = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const normalized = (dataArray[i] - 128) / 128;
+          sumSquares += normalized * normalized;
+        }
+        const rms = Math.sqrt(sumSquares / dataArray.length);
+        const db = 20 * Math.log10(rms) + 100;
+        document.getElementById("volume").innerText = `音量(dB): ${db.toFixed(1)}`;
+
+        // 音が大きい → 認識ON
+        if (db > THRESHOLD_DB) {
+          if (!listening) {
+            startListening();
+            listening = true;
+          }
+        } else {
+          if (listening) {
+            stopListening();
+            listening = false;
+          }
+        }
+
+        requestAnimationFrame(loop);
+      }
+      loop();
+    }
+
+    function startListening() {
+      recognizer.listen(result => {
+        const scores = result.scores;
+        const maxScore = Math.max(...scores);
+        const index = scores.indexOf(maxScore);
+        document.getElementById("label").innerText = `ラベル: ${recognizer.wordLabels()[index]}`;
+        document.getElementById("probability").innerText = `信頼度: ${maxScore.toFixed(2)}`;
+      }, {
+        includeSpectrogram: true,
+        probabilityThreshold: 0.75,
+        overlapFactor: 0.5,
+      });
+      console.log("🟢 認識開始");
+    }
+
+    function stopListening() {
+      recognizer.stopListening();
+      document.getElementById("label").innerText = "ラベル: -";
+      document.getElementById("probability").innerText = "信頼度: -";
+      console.log("🔴 認識停止");
+    }
+  </script>
+</body>
+</html>

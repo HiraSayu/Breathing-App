@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>リアルタイム音声認識（Teachable Machine）</title>
+</head>
+<body>
+  <h1>リアルタイム音声認識</h1>
+  <button onclick="init()">モデルをロードして開始</button>
+  <h2 id="label">ラベル: -</h2>
+  <h2 id="probability">信頼度: -</h2>
+
+  <!-- 必要なTensorFlow.jsライブラリ -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.3.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0"></script>
+
+  <script>
+    const URL = "https://teachablemachine.withgoogle.com/models/DpGApq8fT/"; // ← ご自身のモデルURLに書き換え
+
+    let recognizer;
+
+    async function createModel() {
+      const checkpointURL = URL + "model.json"; // model topology
+      const metadataURL = URL + "metadata.json"; // model metadata
+
+      recognizer = speechCommands.create(
+        "BROWSER_FFT", // use browser's native FFT
+        undefined,
+        checkpointURL,
+        metadataURL
+      );
+
+      // モデルをロード
+      await recognizer.ensureModelLoaded();
+      return recognizer;
+    }
+
+    async function init() {
+      const recognizer = await createModel();
+      const classLabels = recognizer.wordLabels(); // クラス名一覧
+
+      recognizer.listen(result => {
+        const scores = result.scores;
+        const maxScore = Math.max(...scores);
+        const index = scores.indexOf(maxScore);
+
+        document.getElementById("label").innerText = `ラベル: ${classLabels[index]}`;
+        document.getElementById("probability").innerText = `信頼度: ${maxScore.toFixed(2)}`;
+      }, {
+        includeSpectrogram: true,
+        probabilityThreshold: 0.75,
+        overlapFactor: 0.5,
+      });
+    }
+  </script>
+</body>
+</html>

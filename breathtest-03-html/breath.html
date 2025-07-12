@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>リアルタイム音声認識</title>
+</head>
+<body>
+  <h1>リアルタイム音声認識デモ</h1>
+  <button onclick="init()">開始</button>
+  <h2 id="label">ラベル: -</h2>
+  <h2 id="probability">信頼度: -</h2>
+
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/sound@0.8.4/dist/teachablemachine-sound.min.js"></script>
+  <script>
+    const URL = "https://teachablemachine.withgoogle.com/models/DpGApq8fT/"; // ← ここを自分のURLに置き換えてください
+
+    let model, recognizer;
+
+    async function init() {
+      const modelURL = URL + "model.json";
+      const metadataURL = URL + "metadata.json";
+
+      recognizer = await tmSound.create(modelURL, metadataURL);
+      await recognizer.ensureModelLoaded();
+
+      // 予測を開始
+      predict();
+    }
+
+    async function predict() {
+      recognizer.listen(async result => {
+        const { label, probability } = getBestPrediction(result);
+        document.getElementById("label").innerText = "ラベル: " + label;
+        document.getElementById("probability").innerText = "信頼度: " + probability.toFixed(2);
+      }, {
+        includeSpectrogram: true,
+        probabilityThreshold: 0.75,
+        overlapFactor: 0.5,
+      });
+    }
+
+    function getBestPrediction(result) {
+      let bestIndex = 0;
+      for (let i = 1; i < result.scores.length; i++) {
+        if (result.scores[i] > result.scores[bestIndex]) {
+          bestIndex = i;
+        }
+      }
+      return {
+        label: recognizer.wordLabels()[bestIndex],
+        probability: result.scores[bestIndex]
+      };
+    }
+  </script>
+</body>
+</html>
